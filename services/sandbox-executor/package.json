@@ -1,0 +1,28 @@
+{
+    "name": "@viber/sandbox-executor",
+    "version": "0.1.0",
+    "description": "VIBER Sandbox Executor - Ephemeral container execution",
+    "main": "dist/index.js",
+    "scripts": {
+        "dev": "tsx watch src/index.ts",
+        "build": "tsc",
+        "start": "node dist/index.js",
+        "test": "vitest run"
+    },
+    "dependencies": {
+        "express": "^4.18.2",
+        "cors": "^2.8.5",
+        "helmet": "^7.1.0",
+        "dockerode": "^4.0.0",
+        "uuid": "^9.0.1",
+        "zod": "^3.22.4",
+        "pino": "^8.17.0"
+    },
+    "devDependencies": {
+        "@types/dockerode": "^3.3.23",
+        "@types/node": "^20.10.0",
+        "tsx": "^4.7.0",
+        "typescript": "^5.3.2",
+        "vitest": "^1.1.0"
+    }
+}

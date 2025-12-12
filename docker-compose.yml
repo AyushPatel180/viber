@@ -1,0 +1,132 @@
+version: '3.8'
+
+services:
+  # ===========================================
+  # Core Services
+  # ===========================================
+  
+  policy-service:
+    build:
+      context: ./services/policy-service
+      dockerfile: Dockerfile
+    ports:
+      - "3006:3006"
+    environment:
+      - NODE_ENV=development
+      - PORT=3006
+      - VAULT_MOCK=true
+      - LOG_LEVEL=debug
+    networks:
+      - viber-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3006/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  audit-service:
+    build:
+      context: ./services/audit-service
+      dockerfile: Dockerfile
+    ports:
+      - "3007:3007"
+    environment:
+      - NODE_ENV=development
+      - PORT=3007
+      - AUDIT_STORE_TYPE=local
+      - AUDIT_STORE_PATH=/app/audit-logs
+      - LOG_LEVEL=debug
+    volumes:
+      - audit-logs:/app/audit-logs
+    networks:
+      - viber-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3007/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===========================================
+  # Infrastructure Services (Development)
+  # ===========================================
+  
+  vault:
+    image: hashicorp/vault:1.15
+    ports:
+      - "8200:8200"
+    environment:
+      - VAULT_DEV_ROOT_TOKEN_ID=dev-root-token
+      - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
+    cap_add:
+      - IPC_LOCK
+    networks:
+      - viber-network
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0
+    ports:
+      - "8080:8080"
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+    command: start-dev
+    networks:
+      - viber-network
+
+  neo4j:
+    image: neo4j:5.15-community
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/password
+      - NEO4J_PLUGINS=["apoc"]
+    volumes:
+      - neo4j-data:/data
+    networks:
+      - viber-network
+
+  milvus:
+    image: milvusdb/milvus:v2.3.4
+    ports:
+      - "19530:19530"
+    environment:
+      - ETCD_ENDPOINTS=etcd:2379
+      - MINIO_ADDRESS=minio:9000
+    depends_on:
+      - etcd
+      - minio
+    networks:
+      - viber-network
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.11
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+    networks:
+      - viber-network
+
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - viber-network
+
+networks:
+  viber-network:
+    driver: bridge
+
+volumes:
+  audit-logs:
+  neo4j-data:
+  minio-data:
