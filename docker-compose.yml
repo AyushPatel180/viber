@@ -46,6 +46,122 @@ services:
       timeout: 10s
       retries: 3
 
+  orchestrator:
+    build:
+      context: ./services/orchestrator
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - CKG_SERVICE_URL=http://ckg-service:3001
+      - VECTOR_SERVICE_URL=http://vector-service:3002
+      - POLICY_SERVICE_URL=http://policy-service:3006
+      - AUDIT_SERVICE_URL=http://audit-service:3007
+    depends_on:
+      - ckg-service
+      - vector-service
+      - policy-service
+      - audit-service
+    networks:
+      - viber-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  ckg-service:
+    build:
+      context: ./services/ckg-service
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+    networks:
+      - viber-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  vector-service:
+    build:
+      context: ./services/vector-service
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=development
+      - PORT=3002
+    networks:
+      - viber-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  speculative-engine:
+    build:
+      context: ./services/speculative-engine
+      dockerfile: Dockerfile
+    ports:
+      - "3003:3003"
+    environment:
+      - NODE_ENV=development
+      - PORT=3003
+      - ORCHESTRATOR_URL=http://orchestrator:3000
+    depends_on:
+      - orchestrator
+    networks:
+      - viber-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  sandbox-executor:
+    build:
+      context: ./services/sandbox-executor
+      dockerfile: Dockerfile
+    ports:
+      - "3004:3004"
+    environment:
+      - NODE_ENV=development
+      - PORT=3004
+      - SANDBOX_MODE=mock
+    networks:
+      - viber-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  oracle-adapter:
+    build:
+      context: ./services/oracle-adapter
+      dockerfile: Dockerfile
+    ports:
+      - "3005:3005"
+    environment:
+      - NODE_ENV=development
+      - PORT=3005
+      - DEFAULT_PROVIDER=mock
+    networks:
+      - viber-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # ===========================================
   # Infrastructure Services (Development)
   # ===========================================

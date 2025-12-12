@@ -1,138 +1,112 @@
 # VIBER - Production-Grade Agentic IDE
 
-<div align="center">
+> Visual Intelligent Builder for Evolutionary Refactoring
 
-**Impact-aware • Grounded • Low-latency • Auditable • Safe-by-default**
+[![CI Pipeline](https://github.com/AyushPatel180/viber/actions/workflows/ci.yml/badge.svg)](https://github.com/AyushPatel180/viber/actions)
 
-![CI](https://github.com/your-org/viber/workflows/CI%20Pipeline/badge.svg)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Node](https://img.shields.io/badge/node-%3E%3D18-green.svg)
-
-</div>
-
----
-
-## Overview
-
-VIBER is a production-grade agentic IDE designed with safety-first principles. It combines:
-
-- **Graph-Vector Hybrid Retrieval** - Code Knowledge Graph (CKG) with semantic vector search
-- **Context Stack Memory** - Tiered memory system for efficient context management
-- **Speculative Local Model** - Low-latency diffs using local Llama models
-- **Oracle Cloud Verification** - GPT/Claude validation with reconciliation
-- **Sandboxed Execution** - Ephemeral containers/micro-VMs for safe testing
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              VIBER Architecture                             │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐  │
-│  │     UI      │───▶│ Orchestrator│───▶│  Speculative │───▶│   Oracle    │  │
-│  │   (React)   │    │             │    │    Engine    │    │   Adapter   │  │
-│  └─────────────┘    └──────┬──────┘    └─────────────┘    └─────────────┘  │
-│                            │                                                │
-│         ┌──────────────────┼──────────────────┐                             │
-│         ▼                  ▼                  ▼                             │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                      │
-│  │ CKG Service │    │   Vector    │    │   Sandbox   │                      │
-│  │  (Graph DB) │    │   Service   │    │  Executor   │                      │
-│  └─────────────┘    └─────────────┘    └─────────────┘                      │
-│                                                                             │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                         Cross-cutting Services                       │   │
-│  │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐              │   │
-│  │  │   Policy    │    │    Audit    │    │   Gateway   │              │   │
-│  │  │   Service   │    │   Service   │    │   (AuthN)   │              │   │
-│  │  └─────────────┘    └─────────────┘    └─────────────┘              │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-## Services
-
-| Service | Description | Port |
-|---------|-------------|------|
-| `orchestrator` | Main coordination and request routing | 3000 |
-| `ckg-service` | Code Knowledge Graph - AST parsing, symbol extraction | 3001 |
-| `vector-service` | Vector embeddings and semantic search | 3002 |
-| `speculative-engine` | Local Llama model for instant diffs | 3003 |
-| `oracle-adapter` | Cloud LLM integration (GPT/Claude) | 3004 |
-| `sandbox-executor` | Ephemeral container execution | 3005 |
-| `policy-service` | RBAC, capability tokens, approvals | 3006 |
-| `audit-service` | Append-only immutable audit trail | 3007 |
-| `ui` | Agent Manager React UI | 3010 |
-
-## Quick Start
-
-### Prerequisites
-
-- Node.js >= 18
-- Docker & Docker Compose
-- HashiCorp Vault (optional for dev)
-
-### Local Development
+## 🚀 Quick Start
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/viber.git
+git clone https://github.com/AyushPatel180/viber.git
 cd viber
 
 # Install dependencies
 npm install
 
-# Start with mock services
-npm run dev:mock
+# Start all services in development
+npm run dev
 
-# Run tests
+# Or start with Docker Compose
+docker-compose up -d
+```
+
+## 📦 Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Orchestrator | 3000 | Central coordinator, GVR, metrics |
+| CKG Service | 3001 | Code Knowledge Graph (AST + dependencies) |
+| Vector Service | 3002 | Semantic embeddings & search |
+| Speculative Engine | 3003 | Diff generation with local model |
+| Sandbox Executor | 3004 | Test & dry-run pipeline |
+| Oracle Adapter | 3005 | Cloud LLM integration |
+| Policy Service | 3006 | RBAC, tokens, permissions |
+| Audit Service | 3007 | Immutable audit logs |
+| Agent UI | 5173 | React dashboard |
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   Agent Manager UI                   │
+└───────────────────────┬─────────────────────────────┘
+                        │
+┌───────────────────────▼─────────────────────────────┐
+│                    Orchestrator                      │
+│  ┌─────────────┐ ┌─────────────┐ ┌───────────────┐  │
+│  │ GVR Engine  │ │Context Stack│ │  Metrics      │  │
+│  └─────────────┘ └─────────────┘ └───────────────┘  │
+└──┬───────────────┬──────────────┬───────────────────┘
+   │               │              │
+┌──▼──┐        ┌───▼───┐     ┌────▼────┐
+│ CKG │        │Vector │     │Speculative
+│     │        │       │     │Engine   │
+└─────┘        └───────┘     └────┬────┘
+                                  │
+               ┌──────────────────┼──────────────────┐
+               │                  │                  │
+          ┌────▼────┐       ┌─────▼────┐       ┌─────▼────┐
+          │ Sandbox │       │  Oracle  │       │  Policy  │
+          │ Executor│       │ Adapter  │       │  Service │
+          └─────────┘       └──────────┘       └──────────┘
+```
+
+## 🔧 Development
+
+```bash
+# Type check
+npm run type-check
+
+# Lint
+npm run lint
+
+# Format
+npm run format
+
+# Build all services
+npm run build
+```
+
+## 🧪 Testing
+
+```bash
+# Run all tests
 npm test
 
-# Lint and format
-npm run lint
-npm run format
+# Run tests for specific service
+npm run test --workspace=services/speculative-engine
 ```
 
-### Docker Compose (Full Stack)
+## 📊 Observability
 
+### Prometheus Metrics
 ```bash
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop all services
-docker-compose down
+curl http://localhost:3000/api/v1/metrics
 ```
 
-## Environment Variables
-
-Copy `.env.example` to `.env` and configure:
-
+### JSON Metrics
 ```bash
-cp .env.example .env
+curl http://localhost:3000/api/v1/metrics/json
 ```
 
-See [.env.example](.env.example) for all available configuration options.
+## 🔐 Security
 
-## Security Policies
+- RBAC via Policy Service
+- Token-based authentication
+- Audit logging for all operations
+- Secrets management ready
 
-VIBER enforces strict security policies:
+## 📝 License
 
-- **Default-deny**: No network/secret access without explicit approval
-- **Sandbox-first**: All execution in ephemeral containers
-- **Immutable audit**: Append-only signed logs for all actions
-- **RBAC**: Role-based access control (developer/reviewer/admin)
-- **Cost controls**: Per-org/project/user spend caps
-
-See [SECURITY.md](SECURITY.md) for details.
-
-## Contributing
-
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) for our code of conduct and development process.
-
-## License
-
-MIT License - see [LICENSE](LICENSE) for details.
+MIT
