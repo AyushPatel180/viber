@@ -140,6 +140,9 @@ jobs:
           - ckg-service
           - vector-service
           - orchestrator
+          - speculative-engine
+          - sandbox-executor
+          - oracle-adapter
     steps:
       - name: Checkout
         uses: actions/checkout@v4

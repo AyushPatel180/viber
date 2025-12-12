@@ -7,6 +7,7 @@ import { pinoHttp } from 'pino-http';
 import { config, isDevelopment } from './config/index.js';
 import gvrRoutes from './routes/gvr.routes.js';
 import contextRoutes from './routes/context.routes.js';
+import metricsRoutes from './routes/metrics.routes.js';
 import type { ApiResponse } from './types/index.js';
 
 // Create logger
@@ -44,6 +45,7 @@ app.get('/health', (_req, res) => {
 // API routes
 app.use('/api/v1', gvrRoutes);
 app.use('/api/v1', contextRoutes);
+app.use('/api/v1', metricsRoutes);
 
 // 404 handler
 app.use((req, res) => {
