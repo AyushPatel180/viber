@@ -6,7 +6,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci
+RUN npm install
 
 # Copy source
 COPY . .
@@ -24,7 +24,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package*.json ./
 
 # Install production dependencies only
-RUN npm ci --production
+RUN npm install --production
 
 # Create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
