@@ -1,175 +1,491 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
+import Editor from '@monaco-editor/react';
+import {
+    Files,
+    Search,
+    GitBranch,
+    Bug,
+    Blocks,
+    Settings,
+    MessageSquare,
+    X,
+    ChevronRight,
+    ChevronDown,
+    FileCode,
+    Folder,
+    FolderOpen,
+    Terminal,
+    Bell,
+    Check,
+    AlertCircle,
+} from 'lucide-react';
 
-interface ServiceHealth {
+interface FileNode {
     name: string;
-    port: number;
-    icon: string;
-    status: 'healthy' | 'unhealthy' | 'loading';
-    stats?: Record<string, unknown>;
+    type: 'file' | 'folder';
+    path: string;
+    children?: FileNode[];
+    content?: string;
+    language?: string;
 }
 
-interface Activity {
+interface Tab {
     id: string;
-    time: string;
-    service: string;
-    message: string;
+    name: string;
+    path: string;
+    content: string;
+    language: string;
+    isDirty: boolean;
 }
 
-const SERVICES: ServiceHealth[] = [
-    { name: 'Orchestrator', port: 3000, icon: '🎯', status: 'loading' },
-    { name: 'CKG Service', port: 3001, icon: '🕸️', status: 'loading' },
-    { name: 'Vector Service', port: 3002, icon: '📊', status: 'loading' },
-    { name: 'Speculative Engine', port: 3003, icon: '⚡', status: 'loading' },
-    { name: 'Sandbox Executor', port: 3004, icon: '📦', status: 'loading' },
-    { name: 'Oracle Adapter', port: 3005, icon: '🔮', status: 'loading' },
-    { name: 'Policy Service', port: 3006, icon: '🔐', status: 'loading' },
-    { name: 'Audit Service', port: 3007, icon: '📝', status: 'loading' },
+interface ChatMessage {
+    id: string;
+    role: 'user' | 'assistant';
+    content: string;
+}
+
+// Sample file structure
+const sampleFiles: FileNode[] = [
+    {
+        name: 'src',
+        type: 'folder',
+        path: '/src',
+        children: [
+            {
+                name: 'index.ts',
+                type: 'file',
+                path: '/src/index.ts',
+                language: 'typescript',
+                content: `import express from 'express';
+import { config } from './config';
+
+const app = express();
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'healthy' });
+});
+
+app.listen(config.PORT, () => {
+  console.log(\`Server running on port \${config.PORT}\`);
+});
+`,
+            },
+            {
+                name: 'config.ts',
+                type: 'file',
+                path: '/src/config.ts',
+                language: 'typescript',
+                content: `export const config = {
+  PORT: process.env.PORT || 3000,
+  NODE_ENV: process.env.NODE_ENV || 'development',
+};
+`,
+            },
+            {
+                name: 'services',
+                type: 'folder',
+                path: '/src/services',
+                children: [
+                    {
+                        name: 'agent.service.ts',
+                        type: 'file',
+                        path: '/src/services/agent.service.ts',
+                        language: 'typescript',
+                        content: `export class AgentService {
+  async generateCode(prompt: string): Promise<string> {
+    // VIBER Agent implementation
+    return \`// Generated code for: \${prompt}\`;
+  }
+}
+`,
+                    },
+                ],
+            },
+        ],
+    },
+    {
+        name: 'package.json',
+        type: 'file',
+        path: '/package.json',
+        language: 'json',
+        content: `{
+  "name": "viber-project",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  }
+}
+`,
+    },
 ];
 
 function App() {
-    const [services, setServices] = useState<ServiceHealth[]>(SERVICES);
-    const [activities, setActivities] = useState<Activity[]>([]);
-    const [stats, setStats] = useState({
-        totalNodes: 0,
-        totalTokens: 0,
-        pendingChangeSets: 0,
-        auditEntries: 0,
-    });
+    const [activeView, setActiveView] = useState<'files' | 'search' | 'git' | 'debug' | 'extensions' | 'chat'>('files');
+    const [tabs, setTabs] = useState<Tab[]>([]);
+    const [activeTab, setActiveTab] = useState<string | null>(null);
+    const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['/src', '/src/services']));
+    const [activePanel, setActivePanel] = useState<'terminal' | 'output' | 'problems'>('terminal');
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+        { id: '1', role: 'assistant', content: 'Hello! I\'m VIBER Agent. How can I help you with your code today?' },
+    ]);
+    const [chatInput, setChatInput] = useState('');
+    const [terminalOutput, setTerminalOutput] = useState<string[]>([
+        '$ npm run dev',
+        '',
+        '> viber@0.1.0 dev',
+        '> tsx watch src/index.ts',
+        '',
+        '[12:03:08] Server running on port 3000',
+        '[12:03:08] Connected to CKG service',
+        '[12:03:08] Connected to Vector service',
+        '',
+    ]);
 
-    useEffect(() => {
-        checkHealth();
-        const interval = setInterval(checkHealth, 10000);
-        return () => clearInterval(interval);
+    const openFile = useCallback((file: FileNode) => {
+        if (file.type !== 'file') return;
+
+        const existingTab = tabs.find(t => t.path === file.path);
+        if (existingTab) {
+            setActiveTab(existingTab.id);
+            return;
+        }
+
+        const newTab: Tab = {
+            id: Date.now().toString(),
+            name: file.name,
+            path: file.path,
+            content: file.content || '',
+            language: file.language || 'plaintext',
+            isDirty: false,
+        };
+
+        setTabs([...tabs, newTab]);
+        setActiveTab(newTab.id);
+    }, [tabs]);
+
+    const closeTab = useCallback((tabId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        const newTabs = tabs.filter(t => t.id !== tabId);
+        setTabs(newTabs);
+        if (activeTab === tabId) {
+            setActiveTab(newTabs.length > 0 ? newTabs[newTabs.length - 1].id : null);
+        }
+    }, [tabs, activeTab]);
+
+    const toggleFolder = useCallback((path: string) => {
+        setExpandedFolders(prev => {
+            const next = new Set(prev);
+            if (next.has(path)) {
+                next.delete(path);
+            } else {
+                next.add(path);
+            }
+            return next;
+        });
     }, []);
 
-    async function checkHealth() {
-        const updated = await Promise.all(
-            services.map(async (service) => {
-                try {
-                    const res = await fetch(`http://localhost:${service.port}/health`);
-                    const data = await res.json();
+    const handleEditorChange = useCallback((value: string | undefined) => {
+        if (!activeTab || !value) return;
+        setTabs(prev => prev.map(t =>
+            t.id === activeTab ? { ...t, content: value, isDirty: true } : t
+        ));
+    }, [activeTab]);
 
-                    addActivity(service.name.toLowerCase().replace(' ', ''), `Health check passed`);
+    const sendChatMessage = useCallback(() => {
+        if (!chatInput.trim()) return;
 
-                    return {
-                        ...service,
-                        status: 'healthy' as const,
-                        stats: data.stats,
-                    };
-                } catch {
-                    return { ...service, status: 'unhealthy' as const };
-                }
-            })
-        );
-
-        setServices(updated);
-
-        // Update stats from CKG and others
-        const ckgStats = updated.find(s => s.name === 'CKG Service')?.stats;
-        const specStats = updated.find(s => s.name === 'Speculative Engine')?.stats;
-        const auditStats = updated.find(s => s.name === 'Audit Service')?.stats;
-
-        setStats({
-            totalNodes: (ckgStats as { totalNodes?: number })?.totalNodes ?? 0,
-            totalTokens: 0,
-            pendingChangeSets: (specStats as { pendingChangeSets?: number })?.pendingChangeSets ?? 0,
-            auditEntries: (auditStats as { totalEntries?: number })?.totalEntries ?? 0,
-        });
-    }
-
-    function addActivity(service: string, message: string) {
-        const activity: Activity = {
+        const userMessage: ChatMessage = {
             id: Date.now().toString(),
-            time: new Date().toLocaleTimeString(),
-            service,
-            message,
+            role: 'user',
+            content: chatInput,
         };
-        setActivities(prev => [activity, ...prev.slice(0, 9)]);
-    }
 
-    const healthyCount = services.filter(s => s.status === 'healthy').length;
+        setChatMessages(prev => [...prev, userMessage]);
+        setChatInput('');
+
+        // Simulate agent response
+        setTimeout(() => {
+            const response: ChatMessage = {
+                id: (Date.now() + 1).toString(),
+                role: 'assistant',
+                content: `I'll help you with: "${chatInput}"\n\nAnalyzing your codebase and generating changes...`,
+            };
+            setChatMessages(prev => [...prev, response]);
+        }, 500);
+    }, [chatInput]);
+
+    const renderFileTree = (nodes: FileNode[], depth = 0) => {
+        return nodes.map(node => (
+            <div key={node.path}>
+                <div
+                    className={`file-item ${node.type === 'folder' ? 'folder' : ''}`}
+                    style={{ paddingLeft: 16 + depth * 16 }}
+                    onClick={() => node.type === 'folder' ? toggleFolder(node.path) : openFile(node)}
+                >
+                    {node.type === 'folder' ? (
+                        expandedFolders.has(node.path) ? (
+                            <>
+                                <ChevronDown size={16} className="file-icon" />
+                                <FolderOpen size={16} className="file-icon" style={{ color: '#dcb67a' }} />
+                            </>
+                        ) : (
+                            <>
+                                <ChevronRight size={16} className="file-icon" />
+                                <Folder size={16} className="file-icon" style={{ color: '#dcb67a' }} />
+                            </>
+                        )
+                    ) : (
+                        <FileCode size={16} className="file-icon" style={{ color: '#519aba' }} />
+                    )}
+                    <span>{node.name}</span>
+                </div>
+                {node.type === 'folder' && expandedFolders.has(node.path) && node.children && (
+                    renderFileTree(node.children, depth + 1)
+                )}
+            </div>
+        ));
+    };
+
+    const currentTab = tabs.find(t => t.id === activeTab);
 
     return (
-        <div className="app">
-            <header className="header">
-                <h1>🚀 VIBER Agent Manager</h1>
-                <div className="header-status">
-                    <span className="status-dot" />
-                    <span>{healthyCount}/{services.length} Services Running</span>
+        <div className="ide-container">
+            {/* Main Content */}
+            <div className="ide-main">
+                {/* Activity Bar */}
+                <div className="activity-bar">
+                    <div
+                        className={`activity-item ${activeView === 'files' ? 'active' : ''}`}
+                        onClick={() => setActiveView('files')}
+                        title="Explorer"
+                    >
+                        <Files size={24} />
+                    </div>
+                    <div
+                        className={`activity-item ${activeView === 'search' ? 'active' : ''}`}
+                        onClick={() => setActiveView('search')}
+                        title="Search"
+                    >
+                        <Search size={24} />
+                    </div>
+                    <div
+                        className={`activity-item ${activeView === 'git' ? 'active' : ''}`}
+                        onClick={() => setActiveView('git')}
+                        title="Source Control"
+                    >
+                        <GitBranch size={24} />
+                    </div>
+                    <div
+                        className={`activity-item ${activeView === 'debug' ? 'active' : ''}`}
+                        onClick={() => setActiveView('debug')}
+                        title="Run and Debug"
+                    >
+                        <Bug size={24} />
+                    </div>
+                    <div
+                        className={`activity-item ${activeView === 'extensions' ? 'active' : ''}`}
+                        onClick={() => setActiveView('extensions')}
+                        title="Extensions"
+                    >
+                        <Blocks size={24} />
+                    </div>
+                    <div
+                        className={`activity-item ${activeView === 'chat' ? 'active' : ''}`}
+                        onClick={() => setActiveView('chat')}
+                        title="VIBER Agent"
+                    >
+                        <MessageSquare size={24} />
+                    </div>
+                    <div className="activity-spacer" />
+                    <div className="activity-item" title="Settings">
+                        <Settings size={24} />
+                    </div>
                 </div>
-            </header>
 
-            <div className="stats-grid">
-                <div className="stat-card">
-                    <div className="stat-label">Services Online</div>
-                    <div className={`stat-value ${healthyCount === services.length ? 'success' : 'warning'}`}>
-                        {healthyCount}
+                {/* Sidebar */}
+                <div className="sidebar">
+                    <div className="sidebar-header">
+                        {activeView === 'files' && 'Explorer'}
+                        {activeView === 'search' && 'Search'}
+                        {activeView === 'git' && 'Source Control'}
+                        {activeView === 'debug' && 'Run and Debug'}
+                        {activeView === 'extensions' && 'Extensions'}
+                        {activeView === 'chat' && 'VIBER Agent'}
+                    </div>
+                    <div className="sidebar-content">
+                        {activeView === 'files' && (
+                            <div className="file-tree">
+                                {renderFileTree(sampleFiles)}
+                            </div>
+                        )}
+                        {activeView === 'chat' && (
+                            <div className="chat-panel">
+                                <div className="chat-messages">
+                                    {chatMessages.map(msg => (
+                                        <div key={msg.id} className={`chat-message ${msg.role}`}>
+                                            <div className="chat-message-content">
+                                                {msg.content}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="chat-input-container">
+                                    <input
+                                        className="chat-input"
+                                        placeholder="Ask VIBER Agent..."
+                                        value={chatInput}
+                                        onChange={(e) => setChatInput(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && sendChatMessage()}
+                                    />
+                                </div>
+                            </div>
+                        )}
+                        {activeView === 'search' && (
+                            <div style={{ padding: '0 12px' }}>
+                                <input
+                                    className="chat-input"
+                                    placeholder="Search files..."
+                                    style={{ marginBottom: 12 }}
+                                />
+                            </div>
+                        )}
+                        {activeView === 'git' && (
+                            <div style={{ padding: '0 12px', color: 'var(--text-secondary)' }}>
+                                <p>No changes detected</p>
+                            </div>
+                        )}
                     </div>
                 </div>
-                <div className="stat-card">
-                    <div className="stat-label">CKG Nodes</div>
-                    <div className="stat-value">{stats.totalNodes.toLocaleString()}</div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-label">Pending Changes</div>
-                    <div className={`stat-value ${stats.pendingChangeSets > 0 ? 'warning' : ''}`}>
-                        {stats.pendingChangeSets}
-                    </div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-label">Audit Entries</div>
-                    <div className="stat-value">{stats.auditEntries}</div>
+
+                {/* Editor Area */}
+                <div className="editor-area">
+                    {/* Tabs */}
+                    {tabs.length > 0 && (
+                        <div className="tabs-container">
+                            {tabs.map(tab => (
+                                <div
+                                    key={tab.id}
+                                    className={`tab ${activeTab === tab.id ? 'active' : ''}`}
+                                    onClick={() => setActiveTab(tab.id)}
+                                >
+                                    <FileCode size={14} style={{ color: '#519aba' }} />
+                                    <span>{tab.isDirty ? `${tab.name} •` : tab.name}</span>
+                                    <div className="tab-close" onClick={(e) => closeTab(tab.id, e)}>
+                                        <X size={14} />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Editor Content */}
+                    {currentTab ? (
+                        <div className="editor-content">
+                            <Editor
+                                height="100%"
+                                language={currentTab.language}
+                                value={currentTab.content}
+                                theme="vs-dark"
+                                onChange={handleEditorChange}
+                                options={{
+                                    fontSize: 14,
+                                    minimap: { enabled: true },
+                                    scrollBeyondLastLine: false,
+                                    automaticLayout: true,
+                                    tabSize: 2,
+                                    wordWrap: 'on',
+                                }}
+                            />
+                        </div>
+                    ) : (
+                        <div className="welcome-screen">
+                            <h1>VIBER IDE</h1>
+                            <p>Visual Intelligent Builder for Evolutionary Refactoring</p>
+                            <div className="welcome-actions">
+                                <div className="welcome-action" onClick={() => setActiveView('files')}>
+                                    <Files size={20} />
+                                    <span>Open Folder</span>
+                                </div>
+                                <div className="welcome-action" onClick={() => setActiveView('chat')}>
+                                    <MessageSquare size={20} />
+                                    <span>Chat with VIBER Agent</span>
+                                </div>
+                                <div className="welcome-action">
+                                    <GitBranch size={20} />
+                                    <span>Clone Repository</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            <h2 className="section-title">Services</h2>
-            <div className="services-grid">
-                {services.map((service) => (
-                    <div key={service.port} className="service-card">
-                        <div className="service-icon">{service.icon}</div>
-                        <div className="service-info">
-                            <div className="service-name">{service.name}</div>
-                            <div className="service-port">Port {service.port}</div>
-                        </div>
-                        <div className={`service-status ${service.status}`}>
-                            {service.status === 'loading' ? (
-                                <>
-                                    <span className="spinner" style={{ width: 12, height: 12 }} />
-                                    Checking
-                                </>
-                            ) : (
-                                <>
-                                    <span className="status-dot" style={{
-                                        background: service.status === 'healthy' ? 'var(--success)' : 'var(--error)'
-                                    }} />
-                                    {service.status === 'healthy' ? 'Healthy' : 'Offline'}
-                                </>
-                            )}
-                        </div>
+            {/* Panel Area */}
+            <div className="panel-area">
+                <div className="panel-tabs">
+                    <div
+                        className={`panel-tab ${activePanel === 'terminal' ? 'active' : ''}`}
+                        onClick={() => setActivePanel('terminal')}
+                    >
+                        <Terminal size={14} style={{ marginRight: 4 }} />
+                        Terminal
                     </div>
-                ))}
+                    <div
+                        className={`panel-tab ${activePanel === 'output' ? 'active' : ''}`}
+                        onClick={() => setActivePanel('output')}
+                    >
+                        Output
+                    </div>
+                    <div
+                        className={`panel-tab ${activePanel === 'problems' ? 'active' : ''}`}
+                        onClick={() => setActivePanel('problems')}
+                    >
+                        Problems
+                    </div>
+                </div>
+                <div className="panel-content">
+                    {activePanel === 'terminal' && (
+                        <div className="terminal-output">
+                            {terminalOutput.map((line, i) => (
+                                <div key={i}>{line}</div>
+                            ))}
+                            <span className="terminal-prompt">$ </span>
+                            <span style={{ opacity: 0.5 }}>|</span>
+                        </div>
+                    )}
+                    {activePanel === 'output' && (
+                        <div>VIBER Agent Output</div>
+                    )}
+                    {activePanel === 'problems' && (
+                        <div style={{ color: 'var(--text-secondary)' }}>No problems detected</div>
+                    )}
+                </div>
             </div>
 
-            <h2 className="section-title">Recent Activity</h2>
-            <div className="activity-section">
-                {activities.length === 0 ? (
-                    <div className="loading">
-                        <span className="spinner" />
-                        Waiting for activity...
-                    </div>
-                ) : (
-                    <ul className="activity-list">
-                        {activities.map((activity) => (
-                            <li key={activity.id} className="activity-item">
-                                <span className="activity-time">{activity.time}</span>
-                                <span className={`activity-badge ${activity.service}`}>
-                                    {activity.service}
-                                </span>
-                                <span className="activity-message">{activity.message}</span>
-                            </li>
-                        ))}
-                    </ul>
-                )}
+            {/* Status Bar */}
+            <div className="status-bar">
+                <div className="status-item">
+                    <GitBranch size={14} />
+                    main
+                </div>
+                <div className="status-item">
+                    <Check size={14} />
+                    0 Problems
+                </div>
+                <div className="status-spacer" />
+                <div className="status-item">
+                    <AlertCircle size={14} />
+                    8 Services Running
+                </div>
+                <div className="status-item">
+                    TypeScript
+                </div>
+                <div className="status-item">
+                    <Bell size={14} />
+                </div>
             </div>
         </div>
     );
