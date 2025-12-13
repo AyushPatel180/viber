@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import {
     Files,
@@ -15,10 +15,14 @@ import {
     Folder,
     FolderOpen,
     Terminal,
-    Bell,
     Check,
     AlertCircle,
+    Sparkles,
+    Play,
+    RefreshCw,
 } from 'lucide-react';
+import { viber, type ChangeSet } from './api/viber';
+import { AgentChat, DiffViewer, ServiceStatus } from './components/Agent';
 
 interface FileNode {
     name: string;
@@ -38,13 +42,7 @@ interface Tab {
     isDirty: boolean;
 }
 
-interface ChatMessage {
-    id: string;
-    role: 'user' | 'assistant';
-    content: string;
-}
-
-// Sample file structure
+// Sample file structure for demo
 const sampleFiles: FileNode[] = [
     {
         name: 'src',
@@ -57,29 +55,58 @@ const sampleFiles: FileNode[] = [
                 path: '/src/index.ts',
                 language: 'typescript',
                 content: `import express from 'express';
-import { config } from './config';
+import cors from 'cors';
+import helmet from 'helmet';
+import { config } from './config/index.js';
+import { logger } from './utils/logger.js';
 
 const app = express();
 
+app.use(helmet());
+app.use(cors());
+app.use(express.json());
+
+// Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'healthy' });
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+  });
 });
 
+// API routes
+app.use('/api/v1', routes);
+
 app.listen(config.PORT, () => {
-  console.log(\`Server running on port \${config.PORT}\`);
+  logger.info(\`Server running on port \${config.PORT}\`);
 });
+
+export default app;
 `,
             },
             {
-                name: 'config.ts',
-                type: 'file',
-                path: '/src/config.ts',
-                language: 'typescript',
-                content: `export const config = {
-  PORT: process.env.PORT || 3000,
-  NODE_ENV: process.env.NODE_ENV || 'development',
-};
+                name: 'config',
+                type: 'folder',
+                path: '/src/config',
+                children: [
+                    {
+                        name: 'index.ts',
+                        type: 'file',
+                        path: '/src/config/index.ts',
+                        language: 'typescript',
+                        content: `import { z } from 'zod';
+
+const envSchema = z.object({
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  PORT: z.string().default('3000').transform(Number),
+  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+});
+
+export const config = envSchema.parse(process.env);
+export const isDevelopment = config.NODE_ENV === 'development';
 `,
+                    },
+                ],
             },
             {
                 name: 'services',
@@ -87,14 +114,54 @@ app.listen(config.PORT, () => {
                 path: '/src/services',
                 children: [
                     {
-                        name: 'agent.service.ts',
+                        name: 'user.service.ts',
                         type: 'file',
-                        path: '/src/services/agent.service.ts',
+                        path: '/src/services/user.service.ts',
                         language: 'typescript',
-                        content: `export class AgentService {
-  async generateCode(prompt: string): Promise<string> {
-    // VIBER Agent implementation
-    return \`// Generated code for: \${prompt}\`;
+                        content: `export interface User {
+  id: string;
+  email: string;
+  name: string;
+  createdAt: Date;
+}
+
+export class UserService {
+  private users: Map<string, User> = new Map();
+
+  async findById(id: string): Promise<User | null> {
+    return this.users.get(id) || null;
+  }
+
+  async findByEmail(email: string): Promise<User | null> {
+    for (const user of this.users.values()) {
+      if (user.email === email) {
+        return user;
+      }
+    }
+    return null;
+  }
+
+  async create(data: Omit<User, 'id' | 'createdAt'>): Promise<User> {
+    const user: User = {
+      id: crypto.randomUUID(),
+      ...data,
+      createdAt: new Date(),
+    };
+    this.users.set(user.id, user);
+    return user;
+  }
+
+  async update(id: string, data: Partial<User>): Promise<User | null> {
+    const user = this.users.get(id);
+    if (!user) return null;
+    
+    const updated = { ...user, ...data };
+    this.users.set(id, updated);
+    return updated;
+  }
+
+  async delete(id: string): Promise<boolean> {
+    return this.users.delete(id);
   }
 }
 `,
@@ -109,40 +176,77 @@ app.listen(config.PORT, () => {
         path: '/package.json',
         language: 'json',
         content: `{
-  "name": "viber-project",
+  "name": "viber-demo-project",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "zod": "^3.22.4",
+    "pino": "^8.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.2",
+    "tsx": "^4.7.0",
+    "vitest": "^1.1.0"
   }
+}
+`,
+    },
+    {
+        name: 'tsconfig.json',
+        type: 'file',
+        path: '/tsconfig.json',
+        language: 'json',
+        content: `{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "./dist",
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }
 `,
     },
 ];
 
 function App() {
-    const [activeView, setActiveView] = useState<'files' | 'search' | 'git' | 'debug' | 'extensions' | 'chat'>('files');
+    const [activeView, setActiveView] = useState<'files' | 'search' | 'git' | 'debug' | 'extensions' | 'agent'>('agent');
     const [tabs, setTabs] = useState<Tab[]>([]);
     const [activeTab, setActiveTab] = useState<string | null>(null);
-    const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['/src', '/src/services']));
-    const [activePanel, setActivePanel] = useState<'terminal' | 'output' | 'problems'>('terminal');
-    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-        { id: '1', role: 'assistant', content: 'Hello! I\'m VIBER Agent. How can I help you with your code today?' },
-    ]);
-    const [chatInput, setChatInput] = useState('');
+    const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['/src', '/src/config', '/src/services']));
+    const [activePanel, setActivePanel] = useState<'terminal' | 'output' | 'problems' | 'diff'>('diff');
+    const [currentChangeSet, setCurrentChangeSet] = useState<ChangeSet | null>(null);
     const [terminalOutput, setTerminalOutput] = useState<string[]>([
+        `VIBER IDE v0.1.0`,
+        `Session: ${viber.getSessionId().slice(0, 8)}...`,
+        '',
         '$ npm run dev',
         '',
         '> viber@0.1.0 dev',
         '> tsx watch src/index.ts',
         '',
-        '[12:03:08] Server running on port 3000',
-        '[12:03:08] Connected to CKG service',
-        '[12:03:08] Connected to Vector service',
+        `[${new Date().toLocaleTimeString()}] Server running on port 3000`,
+        `[${new Date().toLocaleTimeString()}] All services connected`,
         '',
     ]);
+    const [commandInput, setCommandInput] = useState('');
+    const [isExecuting, setIsExecuting] = useState(false);
 
     const openFile = useCallback((file: FileNode) => {
         if (file.type !== 'file') return;
@@ -194,28 +298,71 @@ function App() {
         ));
     }, [activeTab]);
 
-    const sendChatMessage = useCallback(() => {
-        if (!chatInput.trim()) return;
+    const handleChangeSetGenerated = useCallback((changeSet: ChangeSet) => {
+        setCurrentChangeSet(changeSet);
+        setActivePanel('diff');
+    }, []);
 
-        const userMessage: ChatMessage = {
-            id: Date.now().toString(),
-            role: 'user',
-            content: chatInput,
-        };
+    const handleApprove = useCallback(async () => {
+        if (!currentChangeSet) return;
+        try {
+            await viber.approveChangeSet(currentChangeSet.id);
+            setCurrentChangeSet({ ...currentChangeSet, status: 'approved' });
+            setTerminalOutput(prev => [...prev, `[${new Date().toLocaleTimeString()}] ✓ Change set approved`]);
+        } catch (error) {
+            console.error('Failed to approve:', error);
+        }
+    }, [currentChangeSet]);
 
-        setChatMessages(prev => [...prev, userMessage]);
-        setChatInput('');
+    const handleReject = useCallback(async () => {
+        if (!currentChangeSet) return;
+        try {
+            await viber.rejectChangeSet(currentChangeSet.id);
+            setCurrentChangeSet({ ...currentChangeSet, status: 'rejected' });
+            setTerminalOutput(prev => [...prev, `[${new Date().toLocaleTimeString()}] ✗ Change set rejected`]);
+        } catch (error) {
+            console.error('Failed to reject:', error);
+        }
+    }, [currentChangeSet]);
 
-        // Simulate agent response
-        setTimeout(() => {
-            const response: ChatMessage = {
-                id: (Date.now() + 1).toString(),
-                role: 'assistant',
-                content: `I'll help you with: "${chatInput}"\n\nAnalyzing your codebase and generating changes...`,
-            };
-            setChatMessages(prev => [...prev, response]);
-        }, 500);
-    }, [chatInput]);
+    const handleApply = useCallback(async () => {
+        if (!currentChangeSet) return;
+        try {
+            setTerminalOutput(prev => [...prev, `[${new Date().toLocaleTimeString()}] Applying changes...`]);
+            const result = await viber.applyChangeSet(currentChangeSet.id, true);
+            setCurrentChangeSet({ ...currentChangeSet, status: 'applied' });
+            setTerminalOutput(prev => [
+                ...prev,
+                `[${new Date().toLocaleTimeString()}] ✓ Applied ${result.appliedFiles.length} file(s)`,
+                ...result.appliedFiles.map(f => `  - ${f}`),
+            ]);
+        } catch (error) {
+            console.error('Failed to apply:', error);
+        }
+    }, [currentChangeSet]);
+
+    const executeCommand = useCallback(async () => {
+        if (!commandInput.trim() || isExecuting) return;
+
+        setIsExecuting(true);
+        setTerminalOutput(prev => [...prev, `$ ${commandInput}`]);
+
+        try {
+            const result = await viber.executeCommand(commandInput);
+            setTerminalOutput(prev => [
+                ...prev,
+                result.stdout || '',
+                result.stderr ? `Error: ${result.stderr}` : '',
+                `Exit code: ${result.exitCode}`,
+                '',
+            ]);
+        } catch (error) {
+            setTerminalOutput(prev => [...prev, `Error: Could not execute command`, '']);
+        } finally {
+            setCommandInput('');
+            setIsExecuting(false);
+        }
+    }, [commandInput, isExecuting]);
 
     const renderFileTree = (nodes: FileNode[], depth = 0) => {
         return nodes.map(node => (
@@ -249,14 +396,20 @@ function App() {
         ));
     };
 
-    const currentTab = tabs.find(t => t.id === activeTab);
+    const currentTabData = tabs.find(t => t.id === activeTab);
 
     return (
         <div className="ide-container">
-            {/* Main Content */}
             <div className="ide-main">
                 {/* Activity Bar */}
                 <div className="activity-bar">
+                    <div
+                        className={`activity-item ${activeView === 'agent' ? 'active' : ''}`}
+                        onClick={() => setActiveView('agent')}
+                        title="VIBER Agent"
+                    >
+                        <Sparkles size={24} />
+                    </div>
                     <div
                         className={`activity-item ${activeView === 'files' ? 'active' : ''}`}
                         onClick={() => setActiveView('files')}
@@ -285,20 +438,6 @@ function App() {
                     >
                         <Bug size={24} />
                     </div>
-                    <div
-                        className={`activity-item ${activeView === 'extensions' ? 'active' : ''}`}
-                        onClick={() => setActiveView('extensions')}
-                        title="Extensions"
-                    >
-                        <Blocks size={24} />
-                    </div>
-                    <div
-                        className={`activity-item ${activeView === 'chat' ? 'active' : ''}`}
-                        onClick={() => setActiveView('chat')}
-                        title="VIBER Agent"
-                    >
-                        <MessageSquare size={24} />
-                    </div>
                     <div className="activity-spacer" />
                     <div className="activity-item" title="Settings">
                         <Settings size={24} />
@@ -308,39 +447,24 @@ function App() {
                 {/* Sidebar */}
                 <div className="sidebar">
                     <div className="sidebar-header">
+                        {activeView === 'agent' && (
+                            <>
+                                <Sparkles size={14} />
+                                <span style={{ marginLeft: 6 }}>VIBER Agent</span>
+                            </>
+                        )}
                         {activeView === 'files' && 'Explorer'}
                         {activeView === 'search' && 'Search'}
                         {activeView === 'git' && 'Source Control'}
                         {activeView === 'debug' && 'Run and Debug'}
-                        {activeView === 'extensions' && 'Extensions'}
-                        {activeView === 'chat' && 'VIBER Agent'}
                     </div>
                     <div className="sidebar-content">
+                        {activeView === 'agent' && (
+                            <AgentChat onChangeSetGenerated={handleChangeSetGenerated} />
+                        )}
                         {activeView === 'files' && (
                             <div className="file-tree">
                                 {renderFileTree(sampleFiles)}
-                            </div>
-                        )}
-                        {activeView === 'chat' && (
-                            <div className="chat-panel">
-                                <div className="chat-messages">
-                                    {chatMessages.map(msg => (
-                                        <div key={msg.id} className={`chat-message ${msg.role}`}>
-                                            <div className="chat-message-content">
-                                                {msg.content}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                <div className="chat-input-container">
-                                    <input
-                                        className="chat-input"
-                                        placeholder="Ask VIBER Agent..."
-                                        value={chatInput}
-                                        onChange={(e) => setChatInput(e.target.value)}
-                                        onKeyDown={(e) => e.key === 'Enter' && sendChatMessage()}
-                                    />
-                                </div>
                             </div>
                         )}
                         {activeView === 'search' && (
@@ -353,8 +477,9 @@ function App() {
                             </div>
                         )}
                         {activeView === 'git' && (
-                            <div style={{ padding: '0 12px', color: 'var(--text-secondary)' }}>
-                                <p>No changes detected</p>
+                            <div style={{ padding: '12px', color: 'var(--text-secondary)' }}>
+                                <p style={{ marginBottom: 8 }}>Changes (0)</p>
+                                <p style={{ fontSize: 12 }}>No changes detected</p>
                             </div>
                         )}
                     </div>
@@ -382,12 +507,12 @@ function App() {
                     )}
 
                     {/* Editor Content */}
-                    {currentTab ? (
+                    {currentTabData ? (
                         <div className="editor-content">
                             <Editor
                                 height="100%"
-                                language={currentTab.language}
-                                value={currentTab.content}
+                                language={currentTabData.language}
+                                value={currentTabData.content}
                                 theme="vs-dark"
                                 onChange={handleEditorChange}
                                 options={{
@@ -402,20 +527,21 @@ function App() {
                         </div>
                     ) : (
                         <div className="welcome-screen">
+                            <Sparkles size={48} style={{ color: 'var(--accent)', marginBottom: 16 }} />
                             <h1>VIBER IDE</h1>
                             <p>Visual Intelligent Builder for Evolutionary Refactoring</p>
                             <div className="welcome-actions">
-                                <div className="welcome-action" onClick={() => setActiveView('files')}>
-                                    <Files size={20} />
-                                    <span>Open Folder</span>
-                                </div>
-                                <div className="welcome-action" onClick={() => setActiveView('chat')}>
-                                    <MessageSquare size={20} />
+                                <div className="welcome-action" onClick={() => setActiveView('agent')}>
+                                    <Sparkles size={20} />
                                     <span>Chat with VIBER Agent</span>
                                 </div>
+                                <div className="welcome-action" onClick={() => setActiveView('files')}>
+                                    <Files size={20} />
+                                    <span>Open Files</span>
+                                </div>
                                 <div className="welcome-action">
-                                    <GitBranch size={20} />
-                                    <span>Clone Repository</span>
+                                    <Play size={20} />
+                                    <span>Run Dry-Run Pipeline</span>
                                 </div>
                             </div>
                         </div>
@@ -426,6 +552,13 @@ function App() {
             {/* Panel Area */}
             <div className="panel-area">
                 <div className="panel-tabs">
+                    <div
+                        className={`panel-tab ${activePanel === 'diff' ? 'active' : ''}`}
+                        onClick={() => setActivePanel('diff')}
+                    >
+                        <Sparkles size={14} style={{ marginRight: 4 }} />
+                        Changes {currentChangeSet && `(${currentChangeSet.diffs.length})`}
+                    </div>
                     <div
                         className={`panel-tab ${activePanel === 'terminal' ? 'active' : ''}`}
                         onClick={() => setActivePanel('terminal')}
@@ -447,13 +580,32 @@ function App() {
                     </div>
                 </div>
                 <div className="panel-content">
+                    {activePanel === 'diff' && (
+                        <DiffViewer
+                            changeSet={currentChangeSet}
+                            onApprove={handleApprove}
+                            onReject={handleReject}
+                            onApply={handleApply}
+                        />
+                    )}
                     {activePanel === 'terminal' && (
-                        <div className="terminal-output">
-                            {terminalOutput.map((line, i) => (
-                                <div key={i}>{line}</div>
-                            ))}
-                            <span className="terminal-prompt">$ </span>
-                            <span style={{ opacity: 0.5 }}>|</span>
+                        <div className="terminal-container">
+                            <div className="terminal-output">
+                                {terminalOutput.map((line, i) => (
+                                    <div key={i}>{line}</div>
+                                ))}
+                            </div>
+                            <div className="terminal-input-line">
+                                <span className="terminal-prompt">$ </span>
+                                <input
+                                    className="terminal-input"
+                                    value={commandInput}
+                                    onChange={(e) => setCommandInput(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && executeCommand()}
+                                    placeholder="Enter command..."
+                                    disabled={isExecuting}
+                                />
+                            </div>
                         </div>
                     )}
                     {activePanel === 'output' && (
@@ -477,14 +629,10 @@ function App() {
                 </div>
                 <div className="status-spacer" />
                 <div className="status-item">
-                    <AlertCircle size={14} />
-                    8 Services Running
+                    <ServiceStatus />
                 </div>
                 <div className="status-item">
                     TypeScript
-                </div>
-                <div className="status-item">
-                    <Bell size={14} />
                 </div>
             </div>
         </div>

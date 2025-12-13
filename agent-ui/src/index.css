@@ -450,3 +450,349 @@ body {
 .resize-handle:hover {
   background: var(--accent);
 }
+
+/* Agent Chat */
+.agent-chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.chat-message {
+  margin-bottom: 16px;
+}
+
+.chat-message.user .chat-message-content {
+  background: var(--accent);
+  margin-left: 20%;
+  border-radius: 12px 12px 4px 12px;
+}
+
+.chat-message.assistant .chat-message-content {
+  background: var(--bg-tertiary);
+  margin-right: 10%;
+  border-radius: 12px 12px 12px 4px;
+}
+
+.chat-message.system .chat-message-content {
+  background: rgba(241, 76, 76, 0.1);
+  border: 1px solid var(--error);
+  margin-right: 10%;
+  border-radius: 8px;
+}
+
+.chat-message-content {
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.chat-message-content code {
+  background: var(--bg-primary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Menlo', 'Monaco', monospace;
+  font-size: 12px;
+}
+
+.chat-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  padding: 12px;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.chat-input-area {
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+}
+
+.chat-textarea {
+  flex: 1;
+  min-height: 60px;
+  max-height: 120px;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+}
+
+.chat-textarea:focus {
+  border-color: var(--accent);
+}
+
+.chat-send-btn {
+  padding: 0 16px;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.chat-send-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.chat-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Diff Viewer */
+.diff-viewer {
+  height: 100%;
+  overflow: auto;
+}
+
+.diff-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+}
+
+.diff-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+}
+
+.diff-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.diff-status {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.diff-status[data-status="pending"] {
+  background: rgba(255, 193, 7, 0.2);
+  color: var(--warning);
+}
+
+.diff-status[data-status="approved"] {
+  background: rgba(78, 201, 176, 0.2);
+  color: var(--success);
+}
+
+.diff-status[data-status="rejected"] {
+  background: rgba(241, 76, 76, 0.2);
+  color: var(--error);
+}
+
+.diff-status[data-status="applied"] {
+  background: rgba(0, 122, 204, 0.2);
+  color: var(--accent);
+}
+
+.diff-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.diff-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.diff-btn.approve {
+  background: var(--success);
+  color: white;
+}
+
+.diff-btn.reject {
+  background: var(--error);
+  color: white;
+}
+
+.diff-btn.apply {
+  background: var(--accent);
+  color: white;
+}
+
+.diff-prompt {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.diff-files {
+  padding: 8px 0;
+}
+
+.diff-block {
+  margin: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.diff-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+}
+
+.diff-file-path {
+  font-family: 'Menlo', 'Monaco', monospace;
+  font-size: 12px;
+}
+
+.diff-block-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+}
+
+.diff-type {
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.diff-lines {
+  color: var(--text-secondary);
+}
+
+.diff-confidence {
+  color: var(--text-muted);
+}
+
+.diff-content {
+  font-family: 'Menlo', 'Monaco', monospace;
+  font-size: 12px;
+}
+
+.diff-original,
+.diff-proposed {
+  padding: 8px 12px;
+}
+
+.diff-original {
+  background: rgba(241, 76, 76, 0.1);
+  border-bottom: 1px solid var(--border);
+}
+
+.diff-proposed {
+  background: rgba(78, 201, 176, 0.1);
+}
+
+.diff-label {
+  font-size: 10px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--text-secondary);
+}
+
+.diff-original .diff-label {
+  color: var(--error);
+}
+
+.diff-proposed .diff-label {
+  color: var(--success);
+}
+
+.diff-content pre {
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+/* Terminal */
+.terminal-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.terminal-output {
+  flex: 1;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-family: 'Menlo', 'Monaco', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.terminal-input-line {
+  display: flex;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.terminal-prompt {
+  color: var(--success);
+  font-family: 'Menlo', 'Monaco', monospace;
+  font-size: 12px;
+}
+
+.terminal-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: 'Menlo', 'Monaco', monospace;
+  font-size: 12px;
+  outline: none;
+}
+
+/* Service Status */
+.service-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
